@@ -1,0 +1,7 @@
+class Test0 {
+    function void main() {
+        var int x;
+        let x = 3;
+        return;
+    }
+}

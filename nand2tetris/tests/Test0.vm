@@ -1,0 +1,5 @@
+function Test0.main 1
+push constant 3
+pop local 0
+push constant 0
+return

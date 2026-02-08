@@ -1,0 +1,14 @@
+function TestArray.main 1
+push constant 10
+call Array.new 1
+pop local 0
+push constant 2
+push local 0
+add
+push constant 7
+pop temp 0
+pop pointer 1
+push temp 0
+pop that 0
+push constant 0
+return

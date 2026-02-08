@@ -157,12 +157,17 @@ def second_pass(lines: List[str], symbols: Dict[str, int]) -> List[str]:
 # -----------------------------
 
 def main(argv=None):
+    """
+    Hack 汇编器入口
+    argv: 由 CLI 传入的参数列表，例如 ['Add.asm']
+    """
     if argv is None:
         argv = sys.argv[1:]
 
     if len(argv) != 1:
         print("Usage: asm Prog.asm", file=sys.stderr)
         sys.exit(1)
+
     filename = argv[0]
 
     with open(filename) as f:

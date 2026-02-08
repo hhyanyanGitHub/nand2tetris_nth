@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Jack Compiler (TESTs)",
+      "type": "python",
+      "request": "launch",
+      "module": "nand2tetris.cli",
+      "args": [
+        "jack",
+        "tests/Test1.jack"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}

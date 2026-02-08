@@ -1,0 +1,434 @@
+
+'''
+
+   简单粗暴有效：递归下降的“翻译规则”
+-------------------------------------
+每一个非终结符 → 一个 compileXxx()
+每一个终结符 → 一个 eat()
+-------------------------------------
+
+    '''
+
+
+class CompilationEngine:
+    """
+    递归下降语法分析器
+    负责把 token 流解析成 XML 语法树
+    """
+
+    def __init__(self, tokenizer, output_file):
+        self.tokenizer = tokenizer
+        self.out = output_file
+        self.indent = 0
+    def write(self, line: str):
+        self.out.write("  " * self.indent + line + "\n")
+
+    def open_tag(self, tag: str):
+        self.write(f"<{tag}>")
+        self.indent += 1
+    def close_tag(self, tag: str):
+        self.indent -= 1
+        self.write(f"</{tag}>")
+
+    def eat(self, expected_type=None, expected_value=None):
+        """
+        读取当前 token，写入 XML，并前进
+        """
+        if self.tokenizer.current is None:
+            raise SyntaxError("Unexpected EOF")
+
+        token_type = self.tokenizer.token_type().lower()
+        value = self.tokenizer.token_value()
+
+        if expected_type and token_type != expected_type:
+            raise SyntaxError(f"Expected {expected_type}, got {token_type}")
+
+        if expected_value and value != expected_value:
+            raise SyntaxError(f"Expected '{expected_value}', got '{value}'")
+
+        self.write(f"<{token_type}> {value} </{token_type}>")
+        self.tokenizer.advance()
+        
+    def compile_class(self):
+        """
+        编译 class 结构
+        """
+        self.open_tag("class")
+
+        # 'class'
+        self.eat("keyword", "class")
+
+        # className
+        self.eat("identifier")
+
+        # '{'
+        self.eat("symbol", "{")
+
+        # classVarDec*
+        while self.tokenizer.token_value() in ("static", "field"):
+            self.compile_class_var_dec()
+
+        # subroutineDec*
+        while self.tokenizer.token_value() in ("constructor", "function", "method"):
+            self.compile_subroutine()
+
+        # '}'
+        self.eat("symbol", "}")
+
+        self.close_tag("class")
+    def compile_class_var_dec(self):
+        """
+        编译类变量声明：
+        ('static' | 'field') type varName (',' varName)* ';'
+        """
+        self.open_tag("classVarDec")
+
+        # static | field
+        self.eat("keyword")
+
+        # type: int | char | boolean | className
+        if self.tokenizer.token_type() == "KEYWORD":
+            self.eat("keyword")
+        else:
+            self.eat("identifier")
+
+        # 第一个变量名
+        self.eat("identifier")
+
+        # (',' varName)*
+        while self.tokenizer.token_value() == ",":
+            self.eat("symbol", ",")
+            self.eat("identifier")
+
+        # ';'
+        self.eat("symbol", ";")
+
+        self.close_tag("classVarDec")
+    def compile_subroutine(self):
+        """
+        编译子程序声明：
+        constructor | function | method
+        """
+        self.open_tag("subroutineDec")
+
+        # constructor | function | method
+        self.eat("keyword")
+
+        # 返回类型：void | type
+        if self.tokenizer.token_value() == "void":
+            self.eat("keyword", "void")
+        elif self.tokenizer.token_type() == "KEYWORD":
+            self.eat("keyword")
+        else:
+            self.eat("identifier")
+
+        # 子程序名
+        self.eat("identifier")
+
+        # '('
+        self.eat("symbol", "(")
+
+        # 参数列表
+        self.compile_parameter_list()
+
+        # ')'
+        self.eat("symbol", ")")
+
+        # 子程序体
+        self.compile_subroutine_body()
+
+        self.close_tag("subroutineDec")
+    def compile_parameter_list(self):
+        """
+        编译参数列表
+        """
+        self.open_tag("parameterList")
+
+        # 可能为空
+        if self.tokenizer.token_value() != ")":
+            # type
+            if self.tokenizer.token_type() == "KEYWORD":
+                self.eat("keyword")
+            else:
+                self.eat("identifier")
+
+            # varName
+            self.eat("identifier")
+
+            # (',' type varName)*
+            while self.tokenizer.token_value() == ",":
+                self.eat("symbol", ",")
+
+                if self.tokenizer.token_type() == "KEYWORD":
+                    self.eat("keyword")
+                else:
+                    self.eat("identifier")
+
+                self.eat("identifier")
+
+        self.close_tag("parameterList")
+    def compile_subroutine_body(self):
+        """
+        编译子程序体
+        """
+        self.open_tag("subroutineBody")
+
+        # '{'
+        self.eat("symbol", "{")
+
+        # varDec*
+        while self.tokenizer.token_value() == "var":
+            self.compile_var_dec()
+
+        # statements
+        self.compile_statements()
+
+        # '}'
+        self.eat("symbol", "}")
+
+        self.close_tag("subroutineBody")
+
+    def compile_var_dec(self):
+        """
+        编译局部变量声明
+        """
+        self.open_tag("varDec")
+
+        self.eat("keyword", "var")
+
+        # type
+        if self.tokenizer.token_type() == "KEYWORD":
+            self.eat("keyword")
+        else:
+            self.eat("identifier")
+
+        # varName
+        self.eat("identifier")
+
+        while self.tokenizer.token_value() == ",":
+            self.eat("symbol", ",")
+            self.eat("identifier")
+
+        self.eat("symbol", ";")
+
+        self.close_tag("varDec")
+    def compile_statements(self):
+        """
+        编译语句序列
+        """
+        self.open_tag("statements")
+
+        while self.tokenizer.token_value() in (
+            "let", "if", "while", "do", "return"
+        ):
+            if self.tokenizer.token_value() == "do":
+                self.compile_do()
+            elif self.tokenizer.token_value() == "return":
+                self.compile_return()
+            elif self.tokenizer.token_value() == "let":
+                self.compile_let()
+            elif self.tokenizer.token_value() == "if":
+                self.compile_if()
+            elif self.tokenizer.token_value() == "while":
+                self.compile_while()
+
+        self.close_tag("statements")
+    def compile_let(self):
+        """
+        编译 let 语句：
+        let varName ('[' expression ']')? '=' expression ;
+        """
+        self.open_tag("letStatement")
+
+        # 'let'
+        self.eat("keyword", "let")
+
+        # varName
+        self.eat("identifier")
+
+        # 可能是数组访问
+        if self.tokenizer.token_value() == "[":
+            self.eat("symbol", "[")
+            self.compile_expression()
+            self.eat("symbol", "]")
+
+        # '='
+        self.eat("symbol", "=")
+
+        # expression
+        self.compile_expression()
+
+        # ';'
+        self.eat("symbol", ";")
+
+        self.close_tag("letStatement")
+
+    def compile_do(self):
+        """
+        编译 do 语句：
+        do subroutineCall ;
+        """
+        self.open_tag("doStatement")
+
+        # 'do'
+        self.eat("keyword", "do")
+
+        # subroutineCall
+        self.compile_subroutine_call()
+
+        # ';'
+        self.eat("symbol", ";")
+
+        self.close_tag("doStatement")
+    def compile_return(self):
+        """
+        编译 return 语句
+        """
+        self.open_tag("returnStatement")
+
+        # 'return'
+        self.eat("keyword", "return")
+
+        # expression?（如果不是 ';'，说明有表达式）
+        if self.tokenizer.token_value() != ";":
+            self.compile_expression()
+
+        # ';'
+        self.eat("symbol", ";")
+
+        self.close_tag("returnStatement")
+    def compile_if(self):
+        """
+        编译 if 语句（含可选 else）
+        """
+        self.open_tag("ifStatement")
+
+        # 'if'
+        self.eat("keyword", "if")
+
+        # '(' expression ')'
+        self.eat("symbol", "(")
+        self.compile_expression()
+        self.eat("symbol", ")")
+
+        # '{' statements '}'
+        self.eat("symbol", "{")
+        self.compile_statements()
+        self.eat("symbol", "}")
+
+        # 可选 else
+        if self.tokenizer.token_value() == "else":
+            self.eat("keyword", "else")
+            self.eat("symbol", "{")
+            self.compile_statements()
+            self.eat("symbol", "}")
+
+        self.close_tag("ifStatement")
+    def compile_while(self):
+        """
+        编译 while 语句
+        """
+        self.open_tag("whileStatement")
+
+        # 'while'
+        self.eat("keyword", "while")
+
+        # '(' expression ')'
+        self.eat("symbol", "(")
+        self.compile_expression()
+        self.eat("symbol", ")")
+
+        # '{' statements '}'
+        self.eat("symbol", "{")
+        self.compile_statements()
+        self.eat("symbol", "}")
+
+        self.close_tag("whileStatement")
+    def compile_subroutine_call(self):
+        """
+        编译子程序调用
+        """
+        # subroutineName | className | varName
+        self.eat("identifier")
+
+        # 可能是 .xxx
+        if self.tokenizer.token_value() == ".":
+            self.eat("symbol", ".")
+            self.eat("identifier")
+
+        # '('
+        self.eat("symbol", "(")
+
+        # expressionList
+        self.compile_expression_list()
+
+        # ')'
+        self.eat("symbol", ")")
+    def compile_expression_list(self):
+        """
+        编译表达式列表
+        """
+        self.open_tag("expressionList")
+
+        if self.tokenizer.token_value() != ")":
+            self.compile_expression()
+
+            while self.tokenizer.token_value() == ",":
+                self.eat("symbol", ",")
+                self.compile_expression()
+
+        self.close_tag("expressionList")
+    def compile_expression(self):
+        """
+        编译表达式（简化版）
+        """
+        self.open_tag("expression")
+
+        self.compile_term()
+
+        while self.tokenizer.token_value() in (
+            "+", "-", "*", "/", "&", "|", "<", ">", "="
+        ):
+            self.eat("symbol")
+            self.compile_term()
+
+        self.close_tag("expression")
+    def compile_term(self):
+        """
+        编译项（term）
+        """
+        self.open_tag("term")
+
+        token_type = self.tokenizer.token_type()
+        value = self.tokenizer.token_value()
+
+        if token_type in ("INT_CONST", "STRING_CONST", "KEYWORD"):
+            self.eat()
+        elif token_type == "IDENTIFIER":
+            self.eat("identifier")
+
+            # 可能是数组访问或子程序调用
+            if self.tokenizer.token_value() == "[":
+                self.eat("symbol", "[")
+                self.compile_expression()
+                self.eat("symbol", "]")
+            elif self.tokenizer.token_value() in ("(", "."):
+                # 回退：这是 subroutineCall 的一部分
+                if self.tokenizer.token_value() == ".":
+                    self.eat("symbol", ".")
+                    self.eat("identifier")
+                self.eat("symbol", "(")
+                self.compile_expression_list()
+                self.eat("symbol", ")")
+
+        elif value == "(":
+            self.eat("symbol", "(")
+            self.compile_expression()
+            self.eat("symbol", ")")
+
+        elif value in ("-", "~"):
+            self.eat("symbol")
+            self.compile_term()
+
+        self.close_tag("term")
+    

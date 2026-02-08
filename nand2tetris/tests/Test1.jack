@@ -1,0 +1,6 @@
+class Test1 {
+    function void main() {
+        do Output.printInt(3);
+        return;
+    }
+}
